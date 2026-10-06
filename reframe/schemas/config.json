@@ -111,6 +111,16 @@
                     "type": "array",
                     "items": {"type": "string"}
                 },
+                "hq_alloc_backlog": {"type": "integer", "minimum": 1},
+                "hq_alloc_manager": {
+                    "type": "string",
+                    "enum": ["slurm", "pbs"]
+                },
+                "hq_alloc_max_worker_count": {
+                    "type": ["integer", "null"],
+                    "minimum": 1
+                },
+                "hq_alloc_time_limit": {"type": "string"},
                 "ignore_reqnodenotavail": {"type": "boolean"},
                 "job_submit_timeout": {"type": "number"},
                 "max_sacct_failures": {"type": "number"},
@@ -738,6 +748,10 @@
         "systems/partitions/time_limit": null,
         "systems/partitions/devices": [],
         "systems/partitions/extras": {},
+        "systems*/sched_options/hq_alloc_backlog": 1,
+        "systems*/sched_options/hq_alloc_manager": "slurm",
+        "systems*/sched_options/hq_alloc_max_worker_count": null,
+        "systems*/sched_options/hq_alloc_time_limit": "1h",
         "systems*/sched_options/ignore_reqnodenotavail": false,
         "systems*/sched_options/job_submit_timeout": 60,
         "systems*/sched_options/max_sacct_failures": 3,

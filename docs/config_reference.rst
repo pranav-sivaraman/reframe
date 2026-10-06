@@ -602,6 +602,65 @@ System Partition Configuration
    This option is relevant for the Slurm backends only.
 
 
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_backlog
+
+   :required: No
+   :default: ``1``
+
+   The maximum number of allocations that HyperQueue keeps queued (waiting to be started) in the allocation manager at any given time.
+   It must be a positive integer.
+
+   The value is passed to the ``--backlog`` option of ``hq alloc add``.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 4.11
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_manager
+
+   :required: No
+   :default: ``"slurm"``
+
+   The allocation manager that HyperQueue uses to request allocations for its workers.
+   Available values are ``"slurm"`` and ``"pbs"``.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 4.11
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_max_worker_count
+
+   :required: No
+   :default: ``null``
+
+   The maximum number of HyperQueue workers that can be queued or running across all allocations of the allocation queue.
+   If ``null``, the number of workers is not limited by HyperQueue, but only by the allocation manager.
+
+   The value is passed to the ``--max-worker-count`` option of ``hq alloc add``.
+   It must be at least as large as the number of nodes of the largest test, otherwise HyperQueue cannot allocate enough workers to run it.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 4.11
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_time_limit
+
+   :required: No
+   :default: ``"1h"``
+
+   The time limit of each allocation that HyperQueue requests for its workers.
+
+   The value is passed as is to HyperQueue and accepts any `HyperQueue duration <https://it4innovations.github.io/hyperqueue/stable/cli/shortcuts/#duration>`__, e.g., ``"30m"`` or ``"2h"``.
+   It should be longer than the :attr:`~reframe.core.pipeline.RegressionTest.time_limit` of the tests, since HyperQueue interrupts and restarts any test that is still running when its allocation ends.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 4.11
+
+
 .. py:attribute:: systems.partitions.launcher
 
    :required: Yes

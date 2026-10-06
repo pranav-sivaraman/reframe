@@ -179,6 +179,18 @@ class SrunAllocationLauncher(JobLauncher):
         return ret
 
 
+@register_launcher('hqsrun')
+class HyperQueueSrunLauncher(SrunAllocationLauncher):
+    '''Launcher for jobs of the ``hyperqueue`` scheduler.
+
+    Restricts ``srun`` to the nodes that HyperQueue assigned to the task.
+    '''
+
+    def command(self, job):
+        return super().command(job) + ['--nodes=$HQ_NUM_NODES',
+                                       '--nodefile=$HQ_NODE_FILE']
+
+
 @register_launcher('lrun')
 class LrunLauncher(JobLauncher):
     '''LLNL's custom parallel job launcher'''
