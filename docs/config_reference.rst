@@ -602,6 +602,97 @@ System Partition Configuration
    This option is relevant for the Slurm backends only.
 
 
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_manager
+
+   :required: No
+   :default: ``"slurm"``
+
+   The workload manager that HyperQueue requests allocations from for its workers.
+   Currently, only ``"slurm"`` is supported.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 5.0
+
+   .. seealso:: `HyperQueue: Allocation queue <https://it4innovations.github.io/hyperqueue/stable/deployment/allocation/#allocation-queue>`__
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_time_limit
+
+   :required: No
+   :default: ``3600``
+
+   The time limit of each allocation that HyperQueue requests for its workers, in seconds.
+
+   It should be longer than the :attr:`~reframe.core.pipeline.RegressionTest.time_limit` of the tests, since a test can only run inside a single allocation.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 5.0
+
+   .. seealso:: `HyperQueue: Time limit <https://it4innovations.github.io/hyperqueue/stable/deployment/allocation/#time-limit>`__
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_backlog
+
+   :required: No
+   :default: ``1``
+
+   The maximum number of allocations that HyperQueue keeps queued, i.e., waiting to start, in the workload manager.
+   It must be a positive integer.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 5.0
+
+   .. seealso:: `HyperQueue: Backlog <https://it4innovations.github.io/hyperqueue/stable/deployment/allocation/#backlog>`__
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_max_worker_count
+
+   :required: No
+   :default: ``null``
+
+   The maximum number of HyperQueue workers that can be queued or running at the same time across all allocations of an allocation queue.
+   If ``null``, the number of workers is limited only by the workload manager.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 5.0
+
+   .. seealso:: `HyperQueue: Maximum worker count <https://it4innovations.github.io/hyperqueue/stable/deployment/allocation/#maximum-worker-count>`__
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_idle_timeout
+
+   :required: No
+   :default: ``30``
+
+   The time in seconds after which an idle HyperQueue worker stops, releasing its allocation once all its workers have stopped.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 5.0
+
+   .. seealso:: `HyperQueue: Idle timeout <https://it4innovations.github.io/hyperqueue/stable/deployment/allocation/#idle-timeout>`__
+
+
+.. py:attribute:: systems.partitions.sched_options.hq_alloc_worker_launch_cmd
+
+   :required: No
+   :default: ``null``
+
+   The command that starts the HyperQueue workers on the nodes of an allocation.
+
+   If ``null``, ReFrame chooses the command based on the Slurm version:
+   ``srun --external-launcher --ntasks-per-node=1`` for Slurm 23.11 or later, and ``srun --overlap --ntasks-per-node=1 --cpu-bind=none --mem-bind=none`` otherwise.
+   Set this option if neither command works on your system.
+
+   This option is relevant for the ``hyperqueue`` backend only.
+
+   .. versionadded:: 5.0
+
+
 .. py:attribute:: systems.partitions.launcher
 
    :required: Yes
