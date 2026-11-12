@@ -305,6 +305,9 @@ System Partition Configuration
    Supported schedulers are the following:
 
    - ``flux``: Jobs will be launched using the `Flux Framework <https://flux-framework.org/>`_ scheduler.
+   - ``hyperqueue``: Jobs will be launched as `HyperQueue <https://it4innovations.github.io/hyperqueue/>`__ jobs.
+     HyperQueue requests Slurm allocations for its workers itself, using the partition's :attr:`~config.systems.partitions.access` options and the ``hq_alloc_*`` scheduler options, and runs each job on whole nodes of an allocation.
+     Use it with the ``hqsrun`` launcher.
    - ``local``: Jobs will be launched locally without using any job scheduler.
    - ``lsf``: Jobs will be launched using the `LSF <https://www.ibm.com/docs/en/spectrum-lsf/10.1.0?topic=lsf-session-scheduler>`__ scheduler.
    - ``oar``: Jobs will be launched using the `OAR <https://oar.imag.fr/>`__ scheduler.
