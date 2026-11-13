@@ -13,15 +13,19 @@
 import atexit
 import contextlib
 import enum
+import json
+import math
+import re
 import shutil
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
 import reframe.utility.osext as osext
 from reframe.core.backends import register_scheduler
 from reframe.core.exceptions import JobSchedulerError, SpawnedProcessError
-from reframe.core.schedulers import JobScheduler
+from reframe.core.schedulers import Job, JobScheduler
 
 if shutil.which("hq"):
     error = None
@@ -31,6 +35,10 @@ else:
 _SERVER_BASE_DIR = Path.home() / ".reframe" / "hq"
 _SERVER_WAIT_TIMEOUT_S = 30
 _SERVER_STOP_TIMEOUT_S = 10
+
+# HQ task states that end a task, upper-cased as ReFrame's other backends do;
+# CANCELLED and TIMEOUT are set by `_update_state()`, see there
+_COMPLETED_STATES = ("FINISHED", "FAILED", "CANCELLED", "ABORTED", "TIMEOUT")
 
 
 class _AllocManager(str, enum.Enum):
@@ -206,6 +214,14 @@ class _ServerRegistry:
 _servers = _ServerRegistry()
 
 
+class _HyperQueueJob(Job):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Directory of the server this job was submitted to; set by `submit()`
+        self._hq_server_dir = None
+
+
 @register_scheduler("hyperqueue", error=error)
 class HyperQueueJobScheduler(JobScheduler):
     def __init__(self):
@@ -217,28 +233,142 @@ class HyperQueueJobScheduler(JobScheduler):
         self._alloc_worker_launch_cmd = self.get_option("hq_alloc_worker_launch_cmd")
 
     def make_job(self, *args, **kwargs):
-        raise NotImplementedError
+        return _HyperQueueJob(*args, **kwargs)
 
     def emit_preamble(self, job):
-        raise NotImplementedError
+        # Scheduler options go to the allocation, through the queue spec
+        return []
 
     def allnodes(self):
-        raise NotImplementedError
+        raise NotImplementedError(
+            "the hyperqueue backend does not support node listing"
+        )
 
     def filternodes(self, job, nodes):
-        raise NotImplementedError
+        raise NotImplementedError(
+            "the hyperqueue backend does not support node filtering"
+        )
+
+    def _alloc_queue_spec(self, job):
+        num_tasks = job.num_tasks or 1
+        num_tasks_per_node = job.num_tasks_per_node or 1
+        num_nodes = math.ceil(num_tasks / num_tasks_per_node)
+        return _AllocQueueSpec(
+            manager=self._alloc_manager,
+            time_limit_s=self._alloc_time_limit_s,
+            backlog=self._alloc_backlog,
+            max_workers_per_alloc=num_nodes,
+            idle_timeout_s=self._alloc_idle_timeout_s,
+            max_worker_count=self._alloc_max_worker_count,
+            worker_launch_cmd=self._alloc_worker_launch_cmd,
+            rfm_access=tuple(
+                job.sched_access + job.options + job.cli_options
+            ),
+        )
 
     def submit(self, job):
-        raise NotImplementedError
+        spec = self._alloc_queue_spec(job)
+        server = _servers.get(spec)
+
+        workdir = Path(job.workdir).resolve()
+        submit_cmd = [
+            "hq",
+            "--server-dir",
+            str(server.server_dir),
+            "--output-mode",
+            "json",
+            "submit",
+            f"--name={job.name}",
+            f"--cwd={workdir}",
+            f"--stdout={workdir / job.stdout}",
+            f"--stderr={workdir / job.stderr}",
+            # Every job gets whole nodes, as with an `sbatch` allocation
+            f"--nodes={spec.max_workers_per_alloc}",
+        ]
+        if job.time_limit:
+            submit_cmd.append(f"--time-limit={int(job.time_limit)}s")
+
+        submit_cmd.append(str(workdir / job.script_filename))
+        completed = osext.run_command(submit_cmd, check=True)
+
+        job._hq_server_dir = server.server_dir
+        job._jobid = str(json.loads(completed.stdout)["id"])
+        job._submit_time = time.time()
 
     def wait(self, job):
-        raise NotImplementedError
+        if self.finished(job):
+            return
+
+        wait_cmd = [
+            "hq",
+            "--server-dir",
+            str(job._hq_server_dir),
+            "job",
+            "wait",
+            job.jobid,
+        ]
+        osext.run_command(wait_cmd, check=True)
+        self.poll(job)
 
     def cancel(self, job):
-        raise NotImplementedError
+        cancel_cmd = [
+            "hq",
+            "--server-dir",
+            str(job._hq_server_dir),
+            "job",
+            "cancel",
+            job.jobid,
+        ]
+        osext.run_command(cancel_cmd, check=True)
 
     def finished(self, job):
-        raise NotImplementedError
+        return job.state in _COMPLETED_STATES
+
+    def _update_state(self, job, task):
+        """Set the state and exit code of `job` from its HQ task"""
+
+        job._state = task["state"].upper()
+        if job.state == "CANCELED":
+            # Use the same spelling as the Slurm and Flux backends
+            job._state = "CANCELLED"
+        elif job.state == "FINISHED":
+            job._exitcode = 0
+        elif job.state == "FAILED":
+            error = task.get("error", "")
+            if error == "Time limit reached":
+                # HQ has no timeout state; report it like Slurm does
+                job._state = "TIMEOUT"
+
+            # HQ reports the exit code only in its default error message; a
+            # task may replace that message, so fall back to a non-zero code
+            match = re.match(r"Program terminated with exit code (-?\d+)\.",
+                             error)
+            job._exitcode = int(match.group(1)) if match else -1
 
     def poll(self, *jobs):
-        raise NotImplementedError
+        jobs = [job for job in jobs if job is not None]
+
+        # One query per server for all of its jobs
+        jobs_by_server_dir = {}
+        for job in jobs:
+            jobs_by_server_dir.setdefault(job._hq_server_dir, []).append(job)
+
+        for server_dir, server_jobs in jobs_by_server_dir.items():
+            info_cmd = [
+                "hq",
+                "--server-dir",
+                str(server_dir),
+                "--output-mode",
+                "json",
+                "job",
+                "info",
+                ",".join(job.jobid for job in server_jobs),
+            ]
+            completed = osext.run_command(info_cmd, check=True)
+            infos = {
+                str(info["info"]["id"]): info
+                for info in json.loads(completed.stdout)
+            }
+            for job in server_jobs:
+                # Every HQ job has a single task
+                self._update_state(job, infos[job.jobid]["tasks"][0])
