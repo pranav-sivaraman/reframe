@@ -705,6 +705,18 @@ System Partition Configuration
 
    - ``alps``: Parallel programs will be launched using the `Cray ALPS <https://pubs.cray.com/content/S-2393/CLE%205.2.UP03/cle-xc-system-administration-guide-s-2393-5203-xc/the-aprun-client>`__ ``aprun`` command.
    - ``clush``: Parallel programs will be launched using the `ClusterShell <http://clustershell.readthedocs.org/>`__ ``clush`` command. This launcher uses the partition's :attr:`~config.systems.partitions.access` property in order to determine the options to be passed to ``clush``.
+   - ``hqsrun``: Parallel programs will be launched using `Slurm <https://slurm.schedmd.com/srun.html>`__'s ``srun`` command on the nodes that HyperQueue assigned to the job, with the same options as ``srunalloc``.
+     This launcher is meant for the ``hyperqueue`` scheduler.
+
+     .. note::
+        Jobs of the ``hyperqueue`` scheduler run inside the Slurm job step that started the HyperQueue worker, so they inherit its Slurm environment variables.
+        In particular, ``SLURM_CPU_BIND`` and ``SLURM_MEM_BIND`` are set to ``none``, so ``srun`` does not bind CPUs or memory unless asked to, regardless of the site's default binding.
+        Tests that rely on a specific binding should pass ``--cpu-bind`` and ``--mem-bind`` explicitly, instead of relying on the site defaults.
+
+     .. note::
+        With Slurm 20.11 up to, but not including, 22.05, or if the Slurm version cannot be determined, ``--overlap`` is also passed, so that the job can share the CPUs of the Slurm job step that runs the HyperQueue worker.
+        In this case, ``--exclusive`` is not passed, since ``srun`` does not accept it together with ``--overlap``, and concurrent ``srun`` steps of a job may run on the same CPUs.
+
    - ``ibrun``: Parallel programs will be launched using the ``ibrun`` command.
      This is a custom parallel program launcher used at `TACC <https://portal.tacc.utexas.edu/user-guides/stampede2>`__.
    - ``local``: No parallel program launcher will be used.

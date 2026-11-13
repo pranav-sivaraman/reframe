@@ -184,6 +184,39 @@ class SrunAllocationLauncher(JobLauncher):
         return ret
 
 
+@register_launcher('hqsrun')
+class HyperQueueSrunLauncher(SrunAllocationLauncher):
+    '''Launcher for jobs of the ``hyperqueue`` scheduler.
+
+    Restricts ``srun`` to the nodes that HyperQueue assigned to the job.
+    '''
+
+    def __init__(self):
+        super().__init__()
+
+        # From Slurm 20.11, steps do not share CPUs by default, and before
+        # 22.05, a step only shares the CPUs of the HyperQueue worker's step
+        # if it requests `--overlap` itself; otherwise it waits forever for
+        # CPUs that the worker never releases. Before 20.11, steps share CPUs
+        # anyway and `--overlap` does not exist.
+        slurm_ver = slurm_version()
+        self.use_overlap = (
+            slurm_ver is None or
+            semver.VersionInfo(20, 11, 0) <= slurm_ver <
+            semver.VersionInfo(22, 5, 0)
+        )
+
+    def command(self, job):
+        ret = super().command(job) + ['--nodes=$HQ_NUM_NODES',
+                                      '--nodefile=$HQ_NODE_FILE']
+        if self.use_overlap:
+            # `srun` rejects `--exclusive` together with `--overlap`
+            ret = [opt for opt in ret if opt != '--exclusive']
+            ret.append('--overlap')
+
+        return ret
+
+
 @register_launcher('lrun')
 class LrunLauncher(JobLauncher):
     '''LLNL's custom parallel job launcher'''

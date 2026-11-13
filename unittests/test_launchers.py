@@ -12,8 +12,9 @@ from reframe.core.warnings import ReframeDeprecationWarning
 
 
 @pytest.fixture(params=[
-    'alps', 'clush', 'launcherwrapper', 'local', 'mpiexec', 'mpirun', 'pdsh',
-    'srun', 'srunalloc', 'ssh', 'upcrun', 'upcxx-run', 'lrun', 'lrun-gpu'
+    'alps', 'clush', 'hqsrun', 'launcherwrapper', 'local', 'mpiexec', 'mpirun',
+    'pdsh', 'srun', 'srunalloc', 'ssh', 'upcrun', 'upcxx-run', 'lrun',
+    'lrun-gpu'
 ])
 def launcher(request):
     if request.param == 'launcherwrapper':
@@ -156,6 +157,22 @@ def test_run_command(job):
                            '--gres=gpu:4 '
                            '--fake '
                            '--foo')
+    elif launcher_name == 'hqsrun':
+        assert command == ('srun '
+                           '--job-name=fake_job '
+                           '--time=0:10:0 '
+                           '--ntasks=4 '
+                           '--ntasks-per-node=2 '
+                           '--ntasks-per-core=1 '
+                           '--ntasks-per-socket=1 '
+                           '--cpus-per-task=2 '
+                           '--hint=multithread '
+                           '--gres=gpu:4 '
+                           '--fake '
+                           '--nodes=$HQ_NUM_NODES '
+                           '--nodefile=$HQ_NODE_FILE '
+                           '--overlap '
+                           '--foo')
     elif launcher_name == 'ssh':
         assert command == 'ssh -o BatchMode=yes -l user -p 22222 --foo host'
     elif launcher_name in ('clush', 'pdsh'):
@@ -206,6 +223,14 @@ def test_run_command_minimal(minimal_job, use_modifiers):
         assert command == (f'{prefix}srun '
                            '--job-name=fake_job '
                            '--ntasks=1 '
+                           '--foo')
+    elif launcher_name == 'hqsrun':
+        assert command == (f'{prefix}srun '
+                           '--job-name=fake_job '
+                           '--ntasks=1 '
+                           '--nodes=$HQ_NUM_NODES '
+                           '--nodefile=$HQ_NODE_FILE '
+                           '--overlap '
                            '--foo')
     elif launcher_name == 'ssh':
         assert command == f'{prefix}ssh -o BatchMode=yes --foo host'
