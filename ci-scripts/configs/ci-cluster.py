@@ -48,6 +48,14 @@ site_configuration = {
                     'launcher': 'mpiexec',
                     'access': ['-p all'],
                     'environs': ['gnu', 'clang']
+                },
+                {
+                    'name': 'compute-hyperqueue',
+                    'descr': 'HyperQueue compute nodes',
+                    'scheduler': 'hyperqueue',
+                    'launcher': 'hqsrun',
+                    'access': ['-p all'],
+                    'environs': ['gnu', 'clang']
                 }
             ]
         },
