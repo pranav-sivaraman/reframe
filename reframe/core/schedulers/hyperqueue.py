@@ -13,6 +13,7 @@
 import atexit
 import contextlib
 import enum
+import functools
 import itertools
 import json
 import math
@@ -23,10 +24,13 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import semver
+
 import reframe.utility.osext as osext
 from reframe.core.backends import register_scheduler
 from reframe.core.exceptions import (JobError, JobSchedulerError,
                                      SpawnedProcessError)
+from reframe.core.launchers.mpi import slurm_version
 from reframe.core.schedulers import Job, JobScheduler
 
 if shutil.which("hq"):
@@ -37,6 +41,16 @@ else:
 _SERVER_BASE_DIR = Path.home() / ".reframe" / "hq"
 _SERVER_WAIT_TIMEOUT_S = 30
 _SERVER_STOP_TIMEOUT_S = 10
+
+# Commands that start the workers of an allocation, if the
+# `hq_alloc_worker_launch_cmd` option is not set: Slurm >= 23.11 can start
+# them as an external launcher step, which has access to all the resources of
+# the allocation; older versions get an overlapping step without CPU or
+# memory binding instead
+_SRUN_EXTERNAL_LAUNCHER = "srun --external-launcher --ntasks-per-node=1"
+_SRUN_OVERLAP_UNBOUND = (
+    "srun --overlap --ntasks-per-node=1 --cpu-bind=none --mem-bind=none"
+)
 
 # HQ task states that end a task, upper-cased as ReFrame's other backends do;
 # CANCELLED and TIMEOUT are set by `_update_state()`, see there
@@ -224,6 +238,17 @@ class _HyperQueueJob(Job):
         self._hq_server_dir = None
 
 
+@functools.cache
+def _default_worker_launch_cmd():
+    """The worker launch command for the Slurm version on this system"""
+
+    version = slurm_version()
+    if version is not None and version >= semver.VersionInfo(23, 11, 0):
+        return _SRUN_EXTERNAL_LAUNCHER
+
+    return _SRUN_OVERLAP_UNBOUND
+
+
 @register_scheduler("hyperqueue", error=error)
 class HyperQueueJobScheduler(JobScheduler):
     def __init__(self):
@@ -262,7 +287,8 @@ class HyperQueueJobScheduler(JobScheduler):
             max_workers_per_alloc=num_nodes,
             idle_timeout_s=self._alloc_idle_timeout_s,
             max_worker_count=self._alloc_max_worker_count,
-            worker_launch_cmd=self._alloc_worker_launch_cmd,
+            worker_launch_cmd=(self._alloc_worker_launch_cmd or
+                               _default_worker_launch_cmd()),
             rfm_access=tuple(
                 job.sched_access + job.options + job.cli_options
             ),
