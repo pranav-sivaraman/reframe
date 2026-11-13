@@ -19,6 +19,7 @@ from reframe.core.exceptions import (
     ConfigError, JobError, JobNotStartedError, JobSchedulerError, SkipTestError
 )
 from reframe.core.schedulers import Job
+from reframe.core.schedulers.hyperqueue import _servers as _hq_servers
 from reframe.core.schedulers.slurm import _SlurmNode
 from reframe.utility import nodelist_expand
 
@@ -749,11 +750,23 @@ def test_guess_num_tasks(minimal_job, scheduler):
 
 @pytest.fixture
 def drain_nodes(scheduler):
-    if scheduler.registered_name in {'squeue', 'slurm', 'pbs', 'torque'}:
+    if scheduler.registered_name in {'squeue', 'slurm', 'pbs', 'torque',
+                                     'hyperqueue'}:
         osext.run_command(
             'sudo scontrol update nodename=nid[00-02] state=drain reason="unit tests"',  # noqa: E501
             check=True
         )
+        if scheduler.registered_name == 'hyperqueue':
+            # Draining keeps HyperQueue from getting new allocations, but a
+            # worker left running by an earlier test would still take the
+            # job, so stop those too
+            for server in _hq_servers._servers.values():
+                osext.run_command(
+                    ['hq', '--server-dir', str(server.server_dir),
+                     'worker', 'stop', 'all'],
+                    check=True
+                )
+
         yield
         osext.run_command(
             'sudo scontrol update nodename=nid[00-02] state=resume', check=True

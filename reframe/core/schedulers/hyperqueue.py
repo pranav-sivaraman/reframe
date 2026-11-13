@@ -13,6 +13,7 @@
 import atexit
 import contextlib
 import enum
+import itertools
 import json
 import math
 import re
@@ -24,7 +25,8 @@ from pathlib import Path
 
 import reframe.utility.osext as osext
 from reframe.core.backends import register_scheduler
-from reframe.core.exceptions import JobSchedulerError, SpawnedProcessError
+from reframe.core.exceptions import (JobError, JobSchedulerError,
+                                     SpawnedProcessError)
 from reframe.core.schedulers import Job, JobScheduler
 
 if shutil.which("hq"):
@@ -296,19 +298,12 @@ class HyperQueueJobScheduler(JobScheduler):
         job._submit_time = time.time()
 
     def wait(self, job):
-        if self.finished(job):
-            return
-
-        wait_cmd = [
-            "hq",
-            "--server-dir",
-            str(job._hq_server_dir),
-            "job",
-            "wait",
-            job.jobid,
-        ]
-        osext.run_command(wait_cmd, check=True)
-        self.poll(job)
+        # Poll instead of `hq job wait`, so that `poll()` can cancel a job
+        # that exceeds its `max_pending_time`
+        intervals = itertools.cycle([1, 2, 3])
+        while not self.finished(job):
+            self.poll(job)
+            time.sleep(next(intervals))
 
     def cancel(self, job):
         cancel_cmd = [
@@ -372,3 +367,12 @@ class HyperQueueJobScheduler(JobScheduler):
             for job in server_jobs:
                 # Every HQ job has a single task
                 self._update_state(job, infos[job.jobid]["tasks"][0])
+
+        # Cancel jobs that wait too long; a job waits while HQ requests an
+        # allocation for it as well
+        for job in jobs:
+            if (job.state == "WAITING" and job.max_pending_time and
+                    time.time() - job.submit_time >= job.max_pending_time):
+                self.cancel(job)
+                job._exception = JobError("maximum pending time exceeded",
+                                          job.jobid)
