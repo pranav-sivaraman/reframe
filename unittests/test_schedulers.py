@@ -28,7 +28,7 @@ def launcher():
     return getlauncher('local')
 
 
-@pytest.fixture(params=['flux', 'local', 'lsf', 'oar', 'pbs',
+@pytest.fixture(params=['flux', 'hyperqueue', 'local', 'lsf', 'oar', 'pbs',
                         'sge', 'slurm', 'ssh', 'squeue', 'torque'])
 def scheduler(request):
     try:
@@ -399,6 +399,14 @@ def _expected_ssh_directives_no_tasks(job):
     return set()
 
 
+def _expected_hyperqueue_directives(job):
+    return set()
+
+
+_expected_hyperqueue_directives_minimal = _expected_hyperqueue_directives
+_expected_hyperqueue_directives_no_tasks = _expected_hyperqueue_directives
+
+
 def test_prepare(fake_job):
     sched_name = fake_job.scheduler.registered_name
     if sched_name == 'pbs':
@@ -689,7 +697,8 @@ def test_sched_access_in_submit(make_job):
     job.options = ['--constraint=c2', '--xyz']
     job.scheduler._sched_access_in_submit = True
 
-    if job.scheduler.registered_name in ('flux', 'local', 'ssh'):
+    if job.scheduler.registered_name in ('flux', 'hyperqueue', 'local',
+                                         'ssh'):
         pytest.skip('not relevant for this scheduler backend')
 
     prepare_job(job)
